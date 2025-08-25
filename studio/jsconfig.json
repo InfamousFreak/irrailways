@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "jsx": "preserve"
+  },
+  "include": ["next-env.d.ts", "**/*.js", "**/*.jsx", ".next/types/**/*.js", "../server/index.js"],
+  "exclude": ["node_modules"]
+}
