@@ -38,7 +38,7 @@ export default function CableGisMapPage() {
     const fetchPlans = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch("http://localhost:3001/api/plans");
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/plans`);
         if (!response.ok) throw new Error("Failed to fetch cable plans.");
         const data = await response.json();
         setPlans(data);
@@ -61,7 +61,7 @@ export default function CableGisMapPage() {
       setIsLoading(true);
       try {
         const response = await fetch(
-          `http://localhost:3001/api/geojson/${encodeURIComponent(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/geojson/${encodeURIComponent(
             selectedPlanFileName
           )}`
         );

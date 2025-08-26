@@ -10,9 +10,9 @@ const path = require("path");
 const { DOMParser } = require("xmldom");
 const tj = require("@tmcw/togeojson");
 const turf = require("@turf/turf");
-
+const { Firestore } = require("@google-cloud/firestore");
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001; // Use the PORT env var, or 3001 if it's not set
 
 app.use(
   cors({
@@ -22,7 +22,12 @@ app.use(
 
 // --- In-memory store for cable plans ---
 // In a production application, this would be a database (e.g., Firestore, PostgreSQL).
-let cablePlans = [];
+// let cablePlans = [];
+const firestore = new Firestore({
+  projectId: process.env.GCP_PROJECT_ID,
+  keyFilename: path.join(__dirname, "google-credentials.json"),
+});
+const cablePlansCollection = firestore.collection("cablePlans");
 
 // --- Middleware ---
 
@@ -30,30 +35,6 @@ let cablePlans = [];
  * @description Fetches the list of files from the GCS bucket and populates the in-memory 'cablePlans' array.
  * This makes the server aware of existing files upon startup.
  */
-const populatePlansFromGCS = async () => {
-  try {
-    const [files] = await bucket.getFiles();
-    cablePlans = []; // Clear the array to avoid duplicates on any re-fetch
-
-    files.forEach((file) => {
-      // We only care about KML files
-      if (file.name.toLowerCase().endsWith(".kml")) {
-        cablePlans.push({
-          id: file.metadata.generation, // A unique ID for the file version
-          planName: file.name, // Default plan name to the filename
-          fileName: file.name,
-        });
-      }
-    });
-
-    console.log(
-      `Successfully populated ${cablePlans.length} plans from GCS bucket: ${bucketName}`
-    );
-  } catch (error) {
-    console.error("Error populating plans from GCS:", error);
-    cablePlans = []; // Ensure we start with an empty list on error
-  }
-};
 
 app.use(express.json()); // Middleware to parse JSON bodies
 
@@ -96,8 +77,18 @@ const bucket = storage.bucket(bucketName);
  * @route GET /api/plans
  * @description Retrieves the list of all uploaded cable plans.
  */
-app.get("/api/plans", (req, res) => {
-  res.status(200).json(cablePlans);
+app.get("/api/plans", async (req, res) => {
+  try {
+    const snapshot = await cablePlansCollection.get();
+    const plans = [];
+    snapshot.forEach((doc) => {
+      plans.push({ id: doc.id, ...doc.data() });
+    });
+    res.status(200).json(plans);
+  } catch (error) {
+    console.error("Error fetching plans from Firestore:", error);
+    res.status(500).send({ message: "Failed to fetch plans." });
+  }
 });
 
 /**
@@ -134,17 +125,30 @@ app.post("/api/upload", upload.single("plan-file"), (req, res) => {
     res.status(500).send({ message: err.message });
   });
 
-  blobStream.on("finish", () => {
-    // Add the plan to our in-memory list upon successful upload.
-    const newPlan = { id: Date.now().toString(), planName, fileName };
-    // Avoid adding duplicates
-    if (!cablePlans.some((p) => p.fileName === fileName)) {
-      cablePlans.push(newPlan);
+  blobStream.on("finish", async () => {
+    try {
+      // Add the plan to Firestore upon successful upload.
+      const newPlan = {
+        planName,
+        fileName,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Add a new document to the 'cablePlans' collection
+      await cablePlansCollection.add(newPlan);
+
+      console.log(
+        `Successfully uploaded ${fileName} and saved metadata to Firestore.`
+      );
+      res
+        .status(200)
+        .send({ message: `File ${fileName} uploaded successfully.` });
+    } catch (error) {
+      console.error("Error saving plan to Firestore:", error);
+      res
+        .status(500)
+        .send({ message: "Upload successful, but failed to save plan data." });
     }
-    console.log(`Successfully uploaded ${fileName} to ${bucketName}.`);
-    res
-      .status(200)
-      .send({ message: `File ${fileName} uploaded successfully.` });
   });
 
   // End the stream by writing the file's buffer to it.

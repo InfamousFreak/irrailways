@@ -54,7 +54,7 @@ export default function CablePlanUploadPage() {
 
     try {
       // Use the fetch API to send a POST request to the backend upload endpoint.
-      const response = await fetch("http://localhost:3001/api/upload", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/upload`, {
         method: "POST",
         body: formData,
       });
