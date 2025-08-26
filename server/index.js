@@ -16,7 +16,7 @@ const port = process.env.PORT || 3001; // Use the PORT env var, or 3001 if it's 
 
 app.use(
   cors({
-    origin: "*",
+    origin: "https://irrailways.vercel.app",
   })
 );
 
